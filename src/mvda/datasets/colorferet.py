@@ -77,8 +77,8 @@ def _read_image(path: str, size: Tuple[int, int], grayscale: bool) -> np.ndarray
 
 
 def _scan(root: str):
-    """Return {subject: {pose: filepath}} by recursively scanning ``root``."""
-    table = defaultdict(dict)
+    """Return {subject: {pose: [filepaths]}} by recursively scanning ``root``."""
+    table = defaultdict(lambda: defaultdict(list))
     for dirpath, _, files in os.walk(root):
         for name in files:
             if not _is_image(name):
@@ -87,36 +87,43 @@ def _scan(root: str):
             if not parsed:
                 continue
             subject, pose = parsed
-            # First image wins if a subject has duplicates of the same pose.
-            table[subject].setdefault(pose, os.path.join(dirpath, name))
+            table[subject][pose].append(os.path.join(dirpath, name))
     return table
 
 
 def load_colorferet(
     root: str,
-    poses: Sequence[str] = ("ql", "fa", "qr"),
+    poses: Sequence[str] = ("fa", "fb", "hl", "hr"),
     image_size: Tuple[int, int] = (64, 64),
     grayscale: bool = True,
     max_subjects: Optional[int] = None,
     cache_path: Optional[str] = None,
-) -> Tuple[List[np.ndarray], np.ndarray]:
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """Build multi-view face data from a ColorFERET image tree.
+
+    Each *pose* is a view and each *subject* is a class. Every image is kept as a
+    separate sample, so a view holds all images captured in that pose across all
+    subjects -- views therefore have different sample counts and no per-row
+    correspondence (MvDA pools classes by label). Subjects must appear in *every*
+    requested pose so all classes are present in all views.
 
     Parameters
     ----------
     root : directory containing the FERET image files (scanned recursively).
-    poses : the pose codes to use as views; subjects missing any are dropped.
+    poses : pose codes used as views; subjects missing any pose are dropped.
     image_size : (width, height) each image is resized to before flattening.
     grayscale : load as grayscale (1 channel) vs RGB (3 channels).
     max_subjects : optionally cap the number of classes (useful for quick runs).
     cache_path : if given, assembled arrays are cached to/loaded from this .npz.
 
-    Returns ``(views, y)`` with one view per pose, aligned by subject.
+    Returns ``(views, ys)``: a list of ``(n_v, d)`` feature arrays and a list of
+    matching per-view label arrays (encoded subject ids).
     """
     poses = list(poses)
     if cache_path and os.path.exists(cache_path):
         data = np.load(cache_path, allow_pickle=True)
-        return [data[f"view_{i}"] for i in range(len(poses))], data["y"]
+        return ([data[f"view_{i}"] for i in range(len(poses))],
+                [data[f"y_{i}"] for i in range(len(poses))])
 
     if not os.path.isdir(root):
         raise FileNotFoundError(
@@ -133,17 +140,24 @@ def load_colorferet(
         )
     if max_subjects:
         subjects = subjects[:max_subjects]
+    label_of = {s: i for i, s in enumerate(subjects)}
 
-    views = [np.zeros((len(subjects), image_size[0] * image_size[1] * (1 if grayscale else 3)))
-             for _ in poses]
-    for row, subject in enumerate(subjects):
-        for vi, pose in enumerate(poses):
-            views[vi][row] = _read_image(table[subject][pose], image_size, grayscale)
-
-    y = np.arange(len(subjects))  # encoded subject id -> class label
+    views, ys = [], []
+    for pose in poses:
+        feats, labels = [], []
+        for subject in subjects:
+            for path in table[subject][pose]:
+                feats.append(_read_image(path, image_size, grayscale))
+                labels.append(label_of[subject])
+        views.append(np.asarray(feats))
+        ys.append(np.asarray(labels, dtype=int))
 
     if cache_path:
         os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
-        np.savez_compressed(cache_path, y=y, **{f"view_{i}": v for i, v in enumerate(views)})
+        np.savez_compressed(
+            cache_path,
+            **{f"view_{i}": v for i, v in enumerate(views)},
+            **{f"y_{i}": y for i, y in enumerate(ys)},
+        )
 
-    return views, y
+    return views, ys

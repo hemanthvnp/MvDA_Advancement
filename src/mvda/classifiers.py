@@ -29,8 +29,8 @@ class NearestClassMean:
         self.classes_ = mvlda.classes_
         self._mu = np.vstack([mvlda.class_means_[c] for c in self.classes_])
 
-    def predict(self, Xs: List[np.ndarray]) -> np.ndarray:
-        Z = self.mvlda.transform(Xs)
+    def _assign(self, Z: np.ndarray) -> np.ndarray:
+        """Nearest class centroid for already-projected points ``Z`` (m, k)."""
         if self.metric == "manhattan":
             d = np.abs(Z[:, None, :] - self._mu[None, :, :]).sum(axis=2)
         elif self.metric == "cosine":
@@ -40,6 +40,14 @@ class NearestClassMean:
         else:  # euclidean
             d = np.linalg.norm(Z[:, None, :] - self._mu[None, :, :], axis=2)
         return self.classes_[np.argmin(d, axis=1)]
+
+    def predict(self, Xs: List[np.ndarray]) -> np.ndarray:
+        """Classify *corresponded* multi-view instances (one point per instance)."""
+        return self._assign(self.mvlda.transform(Xs))
+
+    def predict_view(self, v: int, X: np.ndarray) -> np.ndarray:
+        """Classify samples seen only through view ``v`` (single-view probes)."""
+        return self._assign(self.mvlda.transform_view(v, X))
 
 
 class MvdaEnsemble:

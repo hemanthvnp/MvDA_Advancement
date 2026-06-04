@@ -13,30 +13,11 @@ import numpy as np
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
-from mvda.datasets import (  # noqa: E402
-    load_colorferet,
-    load_multiple_features,
-    train_test_split_per_class,
-)
+from mvda.datasets import load_multiple_features, train_test_split_per_class  # noqa: E402
 from mvda.metrics import classification_report_from_cm, confusion, format_report  # noqa: E402
 from mvda.utils import apply_scalers, fit_scalers  # noqa: E402
 
 RESULTS_DIR = os.path.join(_ROOT, "results")
-
-
-def _split_per_class(views, y, train_frac, seed):
-    """Stratified per-class split preserving instance correspondence."""
-    rng = np.random.default_rng(seed)
-    train_idx, test_idx = [], []
-    for c in np.unique(y):
-        idx = np.where(y == c)[0]
-        rng.shuffle(idx)
-        cut = max(1, int(round(len(idx) * train_frac)))
-        train_idx.extend(idx[:cut])
-        test_idx.extend(idx[cut:])
-    train_idx, test_idx = np.array(train_idx), np.array(test_idx)
-    return ([v[train_idx] for v in views], [v[test_idx] for v in views],
-            y[train_idx], y[test_idx])
 
 
 def load_dataset(args):
@@ -45,14 +26,13 @@ def load_dataset(args):
         views, y = load_multiple_features(cache_dir=os.path.join(_ROOT, "data", "mfeat"))
         Xtr, Xte, ytr, yte = train_test_split_per_class(views, y, n_train_per_class=100)
     elif args.dataset == "colorferet":
-        views, y = load_colorferet(
-            root=args.feret_root,
-            poses=tuple(args.feret_poses),
-            image_size=tuple(args.feret_size),
-            max_subjects=args.feret_max_subjects,
-            cache_path=os.path.join(_ROOT, "data", "feret_cache.npz"),
+        # ColorFERET has independently-sampled views (pose=view, multiple images
+        # per subject) and needs PCA + per-view evaluation -- use run_feret.py.
+        raise SystemExit(
+            "For ColorFERET use experiments/run_feret.py (it handles PCA and the "
+            "cross-pose protocol). The shared-correspondence runners only support "
+            "datasets like mfeat."
         )
-        Xtr, Xte, ytr, yte = _split_per_class(views, y, args.train_frac, args.seed)
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 

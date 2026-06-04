@@ -18,7 +18,7 @@ from _common import add_data_args  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 from mvda import MultiViewLDA, MvdaEnsemble, NearestClassMean  # noqa: E402
-from mvda.datasets import load_colorferet, load_multiple_features  # noqa: E402
+from mvda.datasets import load_multiple_features  # noqa: E402
 from mvda.utils import apply_scalers, fit_scalers, set_seed  # noqa: E402
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,10 +27,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def _load_raw(args):
     if args.dataset == "mfeat":
         return load_multiple_features(cache_dir=os.path.join(_ROOT, "data", "mfeat"))
-    return load_colorferet(root=args.feret_root, poses=tuple(args.feret_poses),
-                           image_size=tuple(args.feret_size),
-                           max_subjects=args.feret_max_subjects,
-                           cache_path=os.path.join(_ROOT, "data", "feret_cache.npz"))
+    raise SystemExit("cross_validation.py supports mfeat; for ColorFERET use run_feret.py")
 
 
 def main():

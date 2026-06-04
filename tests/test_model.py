@@ -52,11 +52,41 @@ def test_view_consistency_runs():
     assert np.isfinite(m.W_).all()
 
 
-def test_requires_correspondence():
+def test_requires_correspondence_with_shared_labels():
     Xs, y = _toy_two_view()
-    Xs[1] = Xs[1][:-5]  # break row alignment
+    Xs[1] = Xs[1][:-5]  # break row alignment with a single shared label array
     try:
         MultiViewLDA(mode="mvda").fit(Xs, y)
     except ValueError:
         return
     raise AssertionError("expected ValueError on mismatched view sizes")
+
+
+def _toy_per_view(seed=0):
+    """Two views with DIFFERENT sample counts and independent per-view labels."""
+    rng = np.random.default_rng(seed)
+    centers_a = np.array([[0, 0], [8, 0], [0, 8]], dtype=float)
+    centers_b = np.array([[0, 0, 0], [0, 8, 0], [0, 0, 8]], dtype=float)
+    Xa, ya, Xb, yb = [], [], [], []
+    for c in range(3):
+        Xa.append(rng.normal(centers_a[c], 0.5, size=(30, 2))); ya += [c] * 30
+        Xb.append(rng.normal(centers_b[c], 0.5, size=(20, 3))); yb += [c] * 20
+    return [np.vstack(Xa), np.vstack(Xb)], [np.array(ya), np.array(yb)]
+
+
+def test_per_view_labels_and_probe():
+    Xs, ys = _toy_per_view()
+    m = MultiViewLDA(mode="mvda").fit(Xs, ys)  # per-view labels, unequal sizes
+    assert m.W_.shape == (5, 2)
+    clf = NearestClassMean(m, metric="euclidean")
+    assert (clf.predict_view(0, Xs[0]) == ys[0]).mean() > 0.95
+    assert (clf.predict_view(1, Xs[1]) == ys[1]).mean() > 0.95
+
+
+def test_concat_rejects_per_view_labels():
+    Xs, ys = _toy_per_view()
+    try:
+        MultiViewLDA(mode="concat").fit(Xs, ys)
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError: concat needs corresponded views")

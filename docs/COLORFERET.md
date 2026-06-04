@@ -27,9 +27,9 @@ drive.mount('/content/drive')
 Then point the loader at the mounted path:
 
 ```bash
-python experiments/run_mvda.py --dataset colorferet --mode mvda \
+python experiments/run_feret.py \
     --feret-root /content/drive/MyDrive/colorferet \
-    --feret-poses ql fa qr
+    --feret-poses fa fb hl hr --pca 120
 ```
 
 ## Option B — Local copy / rclone / Google Drive for Desktop
@@ -38,8 +38,7 @@ Mount Drive as a drive letter (Google Drive for Desktop or `rclone mount`), or
 copy the images locally, then:
 
 ```bash
-python experiments/run_mvda.py --dataset colorferet --mode mvda \
-    --feret-root "G:/My Drive/colorferet"
+python experiments/run_feret.py --feret-root "G:/My Drive/colorferet"
 ```
 
 ## Option C — Download the Drive folder with gdown
@@ -52,23 +51,32 @@ python -m gdown --folder "<your-drive-folder-url>" -O data/feret_raw
 The Drive folder must be shared as **"Anyone with the link."** `gdown` enumerates
 the whole tree before downloading, so large folders take a while.
 
+## Protocol
+
+`run_feret.py` treats **pose = view** and **subject = class**, keeping every
+image as a sample. Each view is reduced with PCA (eigenfaces), a shared MvDA
+subspace is learned across poses, and held-out single-pose images are classified
+by nearest class mean in that space — the canonical "pose as view" MvDA face
+recognition setup.
+
 ## Choosing poses
 
-`--feret-poses` selects which poses become views. Subjects missing **any** of
-the requested poses are dropped (multi-view requires correspondence), so more
-poses ⇒ fewer usable subjects. Sensible starting points:
+`--feret-poses` selects which poses become views. A subject must appear in
+**every** requested pose (so all classes exist in all views), so more poses ⇒
+fewer usable subjects. Sensible starting points:
 
 | poses | meaning | trade-off |
 |-------|---------|-----------|
-| `ql fa qr` (default) | quarter-left, frontal, quarter-right | good coverage, 3 views |
+| `fa fb hl hr` (default) | frontal x2, half-left, half-right | good balance |
 | `fa fb` | two frontal captures | most subjects, easiest |
 | `pl hl ql fa qr hr pr` | full pose sweep | richest, fewest subjects |
 
-Tune image size / subject cap for quick runs:
+Tune image size / PCA dims / subject cap for quick runs:
 
 ```bash
-python experiments/run_mvda.py --dataset colorferet \
-    --feret-size 48 48 --feret-max-subjects 100
+python experiments/run_feret.py --feret-root "$FERET_ROOT" \
+    --feret-size 48 48 --pca 80 --feret-max-subjects 100
 ```
 
-Assembled views are cached to `data/feret_cache.npz` so repeat runs are fast.
+Assembled views are cached under `data/feret_<config>.npz` (keyed to the
+poses/size) so repeat runs are fast; pass `--no-cache` to disable.

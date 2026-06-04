@@ -91,7 +91,8 @@ src/mvda/                 importable package
     └── colorferet.py          path-agnostic ColorFERET face loader
 
 experiments/              reproducible runners (CLI)
-├── run_mvda.py           main train/eval entry point
+├── run_mvda.py           main train/eval entry point (mfeat)
+├── run_feret.py          cross-pose face recognition on ColorFERET
 ├── cross_validation.py   k-fold CV of the full pipeline
 ├── ablation_*.py         components / distance / scaler ablations
 └── per_view_analysis.py  per-view discriminability diagnostic
@@ -106,14 +107,16 @@ docs/                     FINDINGS.md, COLORFERET.md, reference PDF
 
 - **UCI Multiple Features** — auto-downloaded and cached on first run. A clean,
   perfectly-corresponded 6-view dataset; the project's primary benchmark.
-- **ColorFERET** (faces) — pose = view, subject = class. The loader is
-  path-agnostic and reads from a local copy, an `rclone` mount, or a Google
+- **ColorFERET** (faces) — pose = view, subject = class; cross-pose recognition
+  via PCA (eigenfaces) + MvDA + nearest-class-mean (`run_feret.py`). The loader
+  is path-agnostic and reads from a local copy, an `rclone` mount, or a Google
   Drive mount in Colab. The images are licensed and **not** included here. See
-  [`docs/COLORFERET.md`](docs/COLORFERET.md) for setup.
+  [`docs/COLORFERET.md`](docs/COLORFERET.md) and
+  [`notebooks/colab_quickstart.ipynb`](notebooks/colab_quickstart.ipynb).
 
   ```bash
-  python experiments/run_mvda.py --dataset colorferet --mode mvda \
-      --feret-root /content/drive/MyDrive/colorferet --feret-poses ql fa qr
+  python experiments/run_feret.py \
+      --feret-root /content/drive/MyDrive/colorferet --feret-poses fa fb hl hr --pca 120
   ```
 
 ---
