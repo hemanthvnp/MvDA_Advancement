@@ -83,6 +83,7 @@ python experiments/cross_validation.py --folds 5
 python experiments/ablation_components.py
 python experiments/ablation_distance.py
 python experiments/ablation_scaler.py
+python experiments/ablation_solver.py     # ratio vs exponential vs harmonic
 python experiments/per_view_analysis.py
 ```
 
@@ -141,6 +142,11 @@ docs/                     FINDINGS.md, COLORFERET.md, reference PDF
 
 - **MvDA** — per-view linear projections via the block-embedded generalized
   eigenproblem.
+- **Discriminant solvers** (`--solver`) drawn from the literature:
+  classical **ratio** (LDA), **exponential** DA (`exp(S_b)w = λ exp(S_w)w`;
+  robust to small-sample singularity), and **harmonic-mean** LDA (reweights
+  pairwise between-class scatter toward confusable class pairs). All whitened to
+  a metric-consistent shared space. See [`docs/FINDINGS.md`](docs/FINDINGS.md).
 - **View-consistency regularization** — optional penalty (`--vc-lambda`)
   encouraging different views of the same instance to align in the shared space.
 - **Concatenation-LDA** — strong corresponded-view baseline.

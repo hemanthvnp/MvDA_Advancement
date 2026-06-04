@@ -32,6 +32,8 @@ def build_parser():
     p = argparse.ArgumentParser(description="Fit MvDA and evaluate on the shared space.")
     add_data_args(p)
     p.add_argument("--mode", choices=["mvda", "concat"], default="mvda")
+    p.add_argument("--solver", choices=["ratio", "exponential", "harmonic"], default="ratio",
+                   help="ratio=classical LDA; exponential=EDA; harmonic=HM-LDA")
     p.add_argument("--classifier", choices=["ncm", "ensemble"], default="ncm")
     p.add_argument("--components", type=int, default=None,
                    help="shared-space dimension (default C-1)")
@@ -54,7 +56,7 @@ def main(argv=None):
 
     print(f"Fitting MultiViewLDA(mode={args.mode}, vc_lambda={args.vc_lambda}) ...")
     mvlda = MultiViewLDA(n_components=args.components, mode=args.mode,
-                         vc_lambda=args.vc_lambda)
+                         vc_lambda=args.vc_lambda, solver=args.solver)
     mvlda.fit(Xtr, ytr)
     print(f"  shared-space dim = {mvlda.W_.shape[1]}")
 

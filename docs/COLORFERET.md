@@ -51,13 +51,29 @@ python -m gdown --folder "<your-drive-folder-url>" -O data/feret_raw
 The Drive folder must be shared as **"Anyone with the link."** `gdown` enumerates
 the whole tree before downloading, so large folders take a while.
 
-## Protocol
+## Protocols
 
-`run_feret.py` treats **pose = view** and **subject = class**, keeping every
-image as a sample. Each view is reduced with PCA (eigenfaces), a shared MvDA
-subspace is learned across poses, and held-out single-pose images are classified
-by nearest class mean in that space — the canonical "pose as view" MvDA face
-recognition setup.
+`run_feret.py` treats **pose = view** and **subject = class**; each view is
+reduced with PCA (eigenfaces) before MvDA. Two evaluation protocols:
+
+- **`--protocol disjoint` (MvDA paper, Kan et al. 2016, default).** 7 poses as
+  views; the first `--train-subjects` (231) identities with `--images-per-pose`
+  (4) images each train the shared subspace; the *remaining, unseen* identities
+  are recognized gallery/probe — the `--gallery-pose` (fa) gives one reference
+  per test subject, and every other-pose image is a probe matched by cosine
+  nearest neighbour. Reports rank-1 recognition accuracy.
+
+  ```bash
+  python experiments/run_feret.py --protocol disjoint --solver ratio \
+      --feret-root "$FERET_ROOT" --feret-poses pl hl ql fa qr hr pr \
+      --train-subjects 231 --images-per-pose 4 --gallery-pose fa --pca 120
+  ```
+
+- **`--protocol closed`.** Per-view stratified split of all subjects; classify
+  held-out single-pose images by nearest class mean.
+
+Swap `--solver ratio|exponential|harmonic` to compare discriminant criteria
+(see [FINDINGS.md](FINDINGS.md)).
 
 ## Choosing poses
 

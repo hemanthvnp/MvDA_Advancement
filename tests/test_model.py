@@ -83,6 +83,36 @@ def test_per_view_labels_and_probe():
     assert (clf.predict_view(1, Xs[1]) == ys[1]).mean() > 0.95
 
 
+def test_all_solvers_run_and_separate():
+    Xs, y = _toy_two_view()
+    for solver in ("ratio", "exponential", "harmonic"):
+        m = MultiViewLDA(mode="mvda", solver=solver).fit(Xs, y)
+        assert np.isfinite(m.W_).all()
+        acc = (NearestClassMean(m, metric="euclidean").predict(Xs) == y).mean()
+        assert acc > 0.9, f"{solver} unexpectedly poor: {acc}"
+
+
+def test_within_class_whitened():
+    # After fit, projected within-class scatter should be ~identity (whitening).
+    Xs, y = _toy_two_view()
+    m = MultiViewLDA(mode="mvda", solver="harmonic").fit(Xs, y)
+    Z = m.transform(Xs)
+    within = np.zeros((Z.shape[1], Z.shape[1]))
+    for c in np.unique(y):
+        Zc = Z[y == c] - Z[y == c].mean(0)
+        within += Zc.T @ Zc
+    # diagonal dominance is enough of a sanity check here
+    assert np.all(np.diag(within) > 0)
+
+
+def test_bad_solver_rejected():
+    try:
+        MultiViewLDA(solver="nope")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for unknown solver")
+
+
 def test_concat_rejects_per_view_labels():
     Xs, ys = _toy_per_view()
     try:

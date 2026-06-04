@@ -20,6 +20,15 @@ set of instances into a single, shared, low-dimensional discriminative space.
 An optional view-consistency (VC) penalty (``vc_lambda``) encourages different
 views' projections of the *same* instance to land close together.
 
+The discriminant subspace can be solved several ways (``solver=``):
+  * ``ratio``       -- classical LDA generalized eigenproblem (default).
+  * ``exponential`` -- Exponential DA: exp(S_b) w = lambda exp(S_w) w, robust to
+    the small-sample-size singularity and margin-enlarging (Adil et al. 2016).
+  * ``harmonic``    -- Harmonic-mean LDA: reweights pairwise between-class
+    scatter toward close, confusable class pairs (Zheng et al., TKDE 2018).
+All solvers' outputs are whitened so the projected within-class scatter is the
+identity, keeping the shared space metric-consistent for nearest-class-mean.
+
 Data contract: ``fit(Xs, y)`` takes ``Xs`` = list of ``V`` arrays each shaped
 ``(n, d_v)``; row ``i`` of every view is the same instance, with label ``y[i]``.
 """
@@ -29,7 +38,63 @@ from __future__ import annotations
 from typing import List, Optional
 
 import numpy as np
-from scipy.linalg import eigh
+from scipy.linalg import eigh, expm
+
+SOLVERS = ("ratio", "exponential", "harmonic")
+
+
+def _top_k(A, B, k):
+    """Top-k generalized eigenvectors of (A, B) by largest eigenvalue."""
+    eigvals, eigvecs = eigh(A, B)
+    return eigvecs[:, np.argsort(-np.real(eigvals))[:k]]
+
+
+def _solve_ratio(S_b, S_w, k, **_):
+    """Classical LDA: ratio-trace generalized eigenproblem."""
+    return _top_k(S_b, S_w, k)
+
+
+def _solve_exponential(S_b, S_w, k, **_):
+    """Exponential discriminant analysis (Adil et al. 2016; Zhang et al. 2010).
+
+    Solve exp(S_b) w = lambda exp(S_w) w. exp(S_w) is always full rank, so this
+    is robust to the small-sample-size singularity, and the exponential enlarges
+    between-class while shrinking within-class margins. Scatters are scaled to
+    unit spectral radius first so expm stays numerically bounded.
+    """
+    scale = max(np.linalg.norm(S_b, 2), np.linalg.norm(S_w, 2), 1e-12)
+    return _top_k(expm(S_b / scale), expm(S_w / scale), k)
+
+
+def _solve_harmonic(S_b, S_w, k, means=None, counts=None, iters=15, eps=1e-6, **_):
+    """Harmonic-mean LDA (Zheng et al., IEEE TKDE 2018).
+
+    Standard LDA's arithmetic-mean between-class scatter is dominated by
+    far-apart class pairs; harmonic mean instead emphasizes the *close* pairs
+    that are easy to confuse. We realize this with iterative reweighting of the
+    pairwise between-class scatter, weight w_kl ~ n_k n_l / dist_kl^2, assembled
+    efficiently as means' L means via the weight graph Laplacian L.
+    """
+    W = _top_k(S_b, S_w, k)
+    n_outer = np.outer(counts, counts).astype(float)
+    np.fill_diagonal(n_outer, 0.0)
+    for _ in range(iters):
+        P = means @ W                                   # (C, k) projected centroids
+        sq = np.sum(P * P, axis=1)
+        dist2 = sq[:, None] + sq[None, :] - 2 * P @ P.T  # pairwise squared dist
+        np.fill_diagonal(dist2, np.inf)
+        Wgt = n_outer / (dist2 ** 2 + eps)              # emphasize close pairs
+        L = np.diag(Wgt.sum(axis=1)) - Wgt
+        S_b_w = means.T @ L @ means
+        W = _top_k(S_b_w, S_w, k)
+    return W
+
+
+_SOLVER_FN = {
+    "ratio": _solve_ratio,
+    "exponential": _solve_exponential,
+    "harmonic": _solve_harmonic,
+}
 
 
 class MultiViewLDA:
@@ -39,15 +104,19 @@ class MultiViewLDA:
         mode: str = "mvda",
         vc_lambda: float = 0.0,
         reg: float = 1e-6,
+        solver: str = "ratio",
     ) -> None:
         if mode not in {"mvda", "concat"}:
             raise ValueError("mode must be 'mvda' or 'concat'")
         if mode == "concat" and vc_lambda:
             raise ValueError("view-consistency is only defined for mode='mvda'")
+        if solver not in SOLVERS:
+            raise ValueError(f"solver must be one of {SOLVERS}")
         self.n_components = n_components
         self.mode = mode
         self.vc_lambda = vc_lambda
         self.reg = reg
+        self.solver = solver
 
     # ------------------------------------------------------------------ utils
     @staticmethod
@@ -165,20 +234,28 @@ class MultiViewLDA:
         scale = max(1e-12, np.trace(S_w) / S_w.shape[0])
         S_w_reg = S_w + max(1e-8, scale * self.reg) * np.eye(S_w.shape[0])
 
-        try:
-            eigvals, eigvecs = eigh(S_b, S_w_reg)
-        except np.linalg.LinAlgError:
-            eigvals, eigvecs = np.linalg.eig(np.linalg.pinv(S_w_reg) @ S_b)
-        eigvals, eigvecs = np.real(eigvals), np.real(eigvecs)
+        # Embedded class centroids and counts (needed for harmonic reweighting
+        # and for nearest-class-mean classification).
+        means_emb = np.vstack([Phi[labels == c].mean(axis=0) for c in self.classes_])
+        counts = np.array([int(np.sum(labels == c)) for c in self.classes_])
 
-        order = np.argsort(-eigvals)[:k]
-        self.eigenvalues_ = eigvals[order]
-        self.W_ = eigvecs[:, order]                      # (D, k) stacked transform
+        try:
+            W = _SOLVER_FN[self.solver](S_b, S_w_reg, k, means=means_emb, counts=counts)
+        except np.linalg.LinAlgError:
+            # Stronger regularization fallback if the eigensolver fails.
+            S_w_reg = S_w + scale * np.eye(S_w.shape[0])
+            W = _solve_ratio(S_b, S_w_reg, k)
+
+        # Whiten the projected within-class scatter to identity so the shared
+        # space is metric-consistent across solvers (the ratio solver is already
+        # S_w-orthonormal; this makes trace-ratio/exponential/harmonic so too,
+        # which is what lets nearest-class-mean compare them fairly).
+        Sw_proj = W.T @ S_w_reg @ W
+        wv, wvec = eigh(Sw_proj)
+        inv_sqrt = wvec @ np.diag(1.0 / np.sqrt(np.maximum(wv, 1e-12))) @ wvec.T
+        self.W_ = W @ inv_sqrt
         self.W_views_ = [self.W_[self.blocks_[v]:self.blocks_[v + 1]] for v in range(self.n_views_)]
 
-        # Shared-space class centroids (projected mean of each class's embedded
-        # samples). Used by nearest-class-mean classification.
-        means_emb = np.vstack([Phi[labels == c].mean(axis=0) for c in self.classes_])
         proj = means_emb @ self.W_
         self.class_means_ = {c: proj[i] for i, c in enumerate(self.classes_)}
         return self

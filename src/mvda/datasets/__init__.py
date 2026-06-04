@@ -5,10 +5,11 @@ view is the same instance, with label ``y[i]``.
 """
 
 from .multiple_features import load_multiple_features, train_test_split_per_class
-from .colorferet import load_colorferet
+from .colorferet import load_colorferet, load_colorferet_grouped
 
 __all__ = [
     "load_multiple_features",
     "train_test_split_per_class",
     "load_colorferet",
+    "load_colorferet_grouped",
 ]

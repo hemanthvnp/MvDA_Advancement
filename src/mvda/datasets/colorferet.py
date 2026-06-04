@@ -161,3 +161,58 @@ def load_colorferet(
         )
 
     return views, ys
+
+
+def load_colorferet_grouped(
+    root: str,
+    poses: Sequence[str] = ("pl", "hl", "ql", "fa", "qr", "hr", "pr"),
+    image_size: Tuple[int, int] = (64, 64),
+    grayscale: bool = True,
+    max_subjects: Optional[int] = None,
+    cache_path: Optional[str] = None,
+):
+    """Load ColorFERET grouped per subject and pose (for the paper's protocol).
+
+    Returns ``(groups, poses)`` where ``groups[label][pose]`` is an
+    ``(n_images, d)`` array. Only subjects present in every requested pose are
+    kept, and ``label`` is the encoded subject id (0..C-1, sorted by subject).
+
+    This grouping enables the subject-disjoint gallery/probe protocol used by the
+    MvDA paper (Kan et al. 2016): train on one set of identities, recognize a
+    disjoint set across poses.
+    """
+    poses = list(poses)
+    if cache_path and os.path.exists(cache_path):
+        data = np.load(cache_path, allow_pickle=True)
+        keys = [k for k in data.files if "|" in k]
+        groups: dict = {}
+        for key in keys:
+            lab, pose = key.split("|")
+            groups.setdefault(int(lab), {})[pose] = data[key]
+        return groups, poses
+
+    if not os.path.isdir(root):
+        raise FileNotFoundError(
+            f"ColorFERET root not found: {root!r} (see docs/COLORFERET.md)."
+        )
+
+    table = _scan(root)
+    subjects = sorted(s for s, p in table.items() if all(pose in p for pose in poses))
+    if not subjects:
+        raise RuntimeError(f"No subjects have all requested poses {poses}.")
+    if max_subjects:
+        subjects = subjects[:max_subjects]
+
+    groups = {}
+    for label, subject in enumerate(subjects):
+        groups[label] = {
+            pose: np.asarray([_read_image(p, image_size, grayscale) for p in table[subject][pose]])
+            for pose in poses
+        }
+
+    if cache_path:
+        os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+        flat = {f"{lab}|{pose}": arr for lab, pp in groups.items() for pose, arr in pp.items()}
+        np.savez_compressed(cache_path, **flat)
+
+    return groups, poses

@@ -100,6 +100,61 @@ Observations:
 
 Reproduce: `experiments/run_feret.py` (see `docs/COLORFERET.md`).
 
+## Discriminant solvers (paper-based variants)
+
+Beyond the classical LDA eigenproblem, the shared subspace can be solved with
+two variants drawn from the literature (`--solver`):
+
+- **Exponential DA** (Adil et al., *Neurocomputing* 2016; Zhang et al. 2010):
+  `exp(S_b) w = λ exp(S_w) w`. `exp(S_w)` is always full rank, so it is robust to
+  the small-sample-size (SSS) singularity, and the exponential map enlarges
+  between-class while shrinking within-class margins.
+- **Harmonic-mean LDA** (Zheng et al., *IEEE TKDE* 2018): the arithmetic-mean
+  between-class scatter is dominated by far-apart class pairs; HM-LDA instead
+  reweights *pairwise* between-class scatter toward the close, confusable pairs
+  (implemented as iterative reweighting via the weight-graph Laplacian).
+
+All solver outputs are whitened so the projected within-class scatter is the
+identity (the classical solver already is), keeping nearest-class-mean fair.
+
+**On UCI Multiple Features** (`experiments/ablation_solver.py`):
+
+| solver | MvDA + NCM (cosine) |
+|--------|--------------------:|
+| ratio (classical) | 97.7% |
+| exponential | 96.3% |
+| harmonic | 97.7% |
+
+The classical solver is already at ceiling here — unsurprising, since mfeat has
+n ≫ d (1000 train vs 649 dims), so EDA's SSS advantage doesn't apply and the
+exponential map slightly over-compresses. Harmonic equals ratio because the ten
+digit classes have no badly-overlapping pairs to up-weight.
+
+**Where the variants are expected to help: ColorFERET.** In the eigenface regime
+(hundreds–thousands of identities, few images each → small-sample, many
+confusable pairs) EDA and HM-LDA are designed exactly for this. Benchmark with
+`run_feret.py --solver exponential` / `--solver harmonic` (see the Colab
+notebook); report the per-solver accuracy alongside `ratio`.
+
+**MvDA-paper FERET protocol.** `run_feret.py --protocol disjoint` reproduces the
+evaluation from Kan et al. 2016: 7 poses as views, the first `--train-subjects`
+(231) identities with `--images-per-pose` (4) images each train the shared
+subspace, and the *remaining, unseen* identities are recognized gallery/probe (a
+gallery pose gives one reference per test subject; every other-pose image is a
+probe matched by cosine nearest-neighbour in the shared space). The
+solver comparison under this protocol is the apples-to-apples test of whether
+the exponential / harmonic variants improve MvDA — run it on Colab and fill in:
+
+| solver | rank-1 (disjoint, 7 poses) |
+|--------|---------------------------:|
+| ratio | _your number_ |
+| exponential | _your number_ |
+| harmonic | _your number_ |
+
+The trace-ratio criterion (TRACK, Wang et al. 2014) was also evaluated but is a
+*feature-selection* method; used as a classification subspace solver it
+underperformed here, so it is not shipped as a solver.
+
 ## What did *not* close the last fraction of a percent
 
 - Larger `k` (>9): no help — LDA is rank-limited at `C-1`.
