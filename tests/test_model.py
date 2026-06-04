@@ -1,0 +1,62 @@
+"""Unit tests for MultiViewLDA on small synthetic data (no downloads)."""
+
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+
+from mvda import MultiViewLDA, NearestClassMean  # noqa: E402
+
+
+def _toy_two_view(n_per_class=40, seed=0):
+    """Two views of a 3-class problem with well-separated, view-specific means."""
+    rng = np.random.default_rng(seed)
+    centers_a = np.array([[0, 0], [8, 0], [0, 8]], dtype=float)
+    centers_b = np.array([[0, 0, 0], [0, 8, 0], [0, 0, 8]], dtype=float)
+    Xa, Xb, y = [], [], []
+    for c in range(3):
+        Xa.append(rng.normal(centers_a[c], 0.5, size=(n_per_class, 2)))
+        Xb.append(rng.normal(centers_b[c], 0.5, size=(n_per_class, 3)))
+        y.append(np.full(n_per_class, c))
+    return [np.vstack(Xa), np.vstack(Xb)], np.concatenate(y)
+
+
+def test_fit_shapes_mvda():
+    Xs, y = _toy_two_view()
+    m = MultiViewLDA(mode="mvda").fit(Xs, y)
+    assert m.W_.shape == (5, 2)  # total_dim=2+3, k=C-1=2
+    assert [w.shape for w in m.W_views_] == [(2, 2), (3, 2)]
+    assert m.transform(Xs).shape == (Xs[0].shape[0], 2)
+
+
+def test_mvda_separates_classes():
+    Xs, y = _toy_two_view()
+    m = MultiViewLDA(mode="mvda").fit(Xs, y)
+    acc = (NearestClassMean(m, metric="euclidean").predict(Xs) == y).mean()
+    assert acc > 0.95
+
+
+def test_concat_mode_runs():
+    Xs, y = _toy_two_view()
+    m = MultiViewLDA(mode="concat").fit(Xs, y)
+    acc = (NearestClassMean(m, metric="euclidean").predict(Xs) == y).mean()
+    assert acc > 0.95
+
+
+def test_view_consistency_runs():
+    Xs, y = _toy_two_view()
+    m = MultiViewLDA(mode="mvda", vc_lambda=0.1).fit(Xs, y)
+    assert m.W_.shape[1] == 2
+    assert np.isfinite(m.W_).all()
+
+
+def test_requires_correspondence():
+    Xs, y = _toy_two_view()
+    Xs[1] = Xs[1][:-5]  # break row alignment
+    try:
+        MultiViewLDA(mode="mvda").fit(Xs, y)
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError on mismatched view sizes")
