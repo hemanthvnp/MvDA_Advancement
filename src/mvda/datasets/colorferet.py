@@ -87,7 +87,8 @@ def _load_subject_poses(args):
 
 
 def _n_workers():
-    return min(32, (os.cpu_count() or 4) * 2)
+    # I/O-bound (Drive/network): use more threads than CPUs
+    return min(64, max(16, (os.cpu_count() or 4) * 4))
 
 
 def _scan(root: str):
