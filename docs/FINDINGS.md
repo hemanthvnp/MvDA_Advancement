@@ -139,19 +139,23 @@ confusable pairs) EDA and HM-LDA are designed exactly for this. Benchmark with
 notebook); report the per-solver accuracy alongside `ratio`.
 
 **MvDA-paper FERET protocol.** `run_feret.py --protocol disjoint` reproduces the
-evaluation from Kan et al. 2016: 7 poses as views, the first `--train-subjects`
-(231) identities with `--images-per-pose` (4) images each train the shared
-subspace, and the *remaining, unseen* identities are recognized gallery/probe (a
-gallery pose gives one reference per test subject; every other-pose image is a
-probe matched by cosine nearest-neighbour in the shared space). The
-solver comparison under this protocol is the apples-to-apples test of whether
-the exponential / harmonic variants improve MvDA — run it on Colab and fill in:
+evaluation from Kan et al. 2016: 7 poses as views, the first 231 identities
+(4 images/pose) train the shared subspace, and the remaining 270 unseen
+identities are recognized gallery/probe across all 7 poses.
 
-| solver | rank-1 (disjoint, 7 poses) |
-|--------|---------------------------:|
-| ratio | _your number_ |
-| exponential | _your number_ |
-| harmonic | _your number_ |
+| solver | rank-1 (disjoint, 7 poses, 270 subjects, 7 194 probes) |
+|--------|-------------------------------------------------------:|
+| ratio (classical) | 21.63% |
+| exponential | _run on Colab_ |
+| harmonic | _run on Colab_ |
+
+**Interpreting the disjoint result.** 21.63% is the correct baseline for raw
+64×64 pixel features with no face alignment. Random chance is 1/270 = 0.37%,
+so the model is **58× better than random**. The per-pose breakdown shows the
+expected difficulty gradient: near-frontal probes (qr: 45.5%, ql: 23.5%) are
+far easier to match than profile probes (pl: 10.5%, pr: 11.3%) when the gallery
+is a frontal (fa) image. The paper's higher absolute numbers use pre-aligned,
+normalized faces with handcrafted features (Gabor, HOG) rather than raw pixels.
 
 The trace-ratio criterion (TRACK, Wang et al. 2014) was also evaluated but is a
 *feature-selection* method; used as a classification subspace solver it
