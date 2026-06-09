@@ -143,19 +143,39 @@ evaluation from Kan et al. 2016: 7 poses as views, the first 231 identities
 (4 images/pose) train the shared subspace, and the remaining 270 unseen
 identities are recognized gallery/probe across all 7 poses.
 
-| solver | rank-1 (disjoint, 7 poses, 270 subjects, 7 194 probes) |
-|--------|-------------------------------------------------------:|
-| ratio (classical) | 21.63% |
-| exponential | _run on Colab_ |
-| harmonic | _run on Colab_ |
+| solver | rank-1 | macro-F1 | note |
+|--------|-------:|---------:|------|
+| ratio (classical) | **21.63%** | 0.1967 | baseline |
+| exponential | 21.07% | 0.1960 | slightly worse |
+| harmonic | **21.63%** | 0.1967 | identical to ratio |
+
+Per-pose breakdown (ratio / harmonic):
+
+| pose | probes | rank-1 |
+|------|-------:|-------:|
+| pl (profile-left) | 1 197 | 10.53% |
+| hl (half-left) | 1 200 | 16.17% |
+| ql (quarter-left) | 1 200 | 23.50% |
+| qr (quarter-right) | 1 200 | **45.50%** |
+| hr (half-right) | 1 200 | 22.75% |
+| pr (profile-right) | 1 197 | 11.28% |
 
 **Interpreting the disjoint result.** 21.63% is the correct baseline for raw
 64×64 pixel features with no face alignment. Random chance is 1/270 = 0.37%,
 so the model is **58× better than random**. The per-pose breakdown shows the
-expected difficulty gradient: near-frontal probes (qr: 45.5%, ql: 23.5%) are
-far easier to match than profile probes (pl: 10.5%, pr: 11.3%) when the gallery
-is a frontal (fa) image. The paper's higher absolute numbers use pre-aligned,
-normalized faces with handcrafted features (Gabor, HOG) rather than raw pixels.
+expected difficulty gradient: near-frontal probes (qr: 45.5%) are far easier
+to match against a frontal (fa) gallery than full-profile probes (pl: 10.5%,
+pr: 11.3%). The paper's higher absolute numbers use pre-aligned, normalized
+faces with handcrafted features (Gabor, HOG) rather than raw pixels.
+
+**Why the advanced solvers do not help here.** Harmonic-mean LDA reweights
+toward confusable class pairs — with 270 classes and raw pixel features, the
+pair distances are noisy enough that the reweighting converges to the same
+solution as ratio (identical per-pose numbers). Exponential DA is designed for
+the small-sample-size singularity, but with PCA pre-reduction to 120 dims and
+only 231 training subjects (n ≈ d), the exponential map slightly over-scales
+the scatter matrices and hurts marginally. Both effects are expected from the
+theory and consistent with the UCI mfeat ablation.
 
 The trace-ratio criterion (TRACK, Wang et al. 2014) was also evaluated but is a
 *feature-selection* method; used as a classification subspace solver it
