@@ -6,5 +6,7 @@ matplotlib>=3.7
 pillow>=10.0
 # Convenience: fetch the ColorFERET Drive folder (optional)
 gdown>=5.0
+# Nifty 50 financial application
+yfinance>=0.2
 # Tests
 pytest>=7.0

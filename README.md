@@ -2,17 +2,32 @@
 
 Built and benchmarked a machine learning pipeline that fuses **multiple heterogeneous
 data sources** into a single low-dimensional discriminative representation — then
-classifies in that shared space. Applied to digit recognition (6 feature extractors)
-and cross-pose face recognition (7 camera angles).
+classifies in that shared space.
 
-The core mathematical operation — maximizing between-class scatter relative to
-within-class scatter across pooled sources — is the same structure underlying
-**multi-factor equity models, PCA-based risk decomposition, and eigenportfolio
-construction** in quantitative finance.
+**Applications:**
+- **Nifty 50 sector classification** — predicts which market sector a stock belongs to
+  from 4 feature views (momentum, volatility, technicals, volume) computed on a 21-day
+  rolling window; no company name or prior sector label used at inference time
+- **Multi-view digit classification** — 6 heterogeneous feature extractors fused into
+  one shared space; 98.7% accuracy, beating MLP / SVM / Random Forest baselines
+- **Cross-pose face recognition** — 7 camera angles as independent views; 95.3%
+  rank-1 identification across 1 225 probe images
+
+The core operation — maximizing between-class scatter relative to within-class scatter
+across pooled sources — is the same structure underlying **multi-factor equity models,
+PCA risk decomposition, and eigenportfolio construction**.
 
 ---
 
 ## Results
+
+### Nifty 50 — Sector classification from multi-view rolling features
+
+Predicts stock sector (IT, Banking, Energy, Auto, FMCG, Pharma, Metals, Infra, Consumer)
+from a 21-day OHLCV window — 4 views: momentum, volatility, technicals, volume.
+No company name or prior sector label used at inference time.
+
+Reproduce: `python experiments/nifty50_sector.py` (requires `pip install yfinance`)
 
 ### UCI Multiple Features — 10-class classification, 6 heterogeneous sources
 
@@ -121,6 +136,9 @@ The fusion layer separates class structure that no single source captures alone.
 
 ```bash
 pip install -r requirements.txt
+
+# Nifty 50 sector classification (financial application)
+python experiments/nifty50_sector.py
 
 # Multi-source fusion vs. MLP / SVM / RF baselines
 python experiments/baseline_comparison.py
